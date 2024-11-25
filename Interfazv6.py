@@ -20,32 +20,12 @@ class SmartHorsesGame:
         self.turn = tk.StringVar(value="Turno: Caballo Blanco")
         self.white_x2 = False
         self.black_x2 = False
-
-        # Archivo para guardar datos
-        self.csv_file = "registro_jugadasv5.csv"
-        self.init_csv()
+        self.move_history = set()  # Evitar ciclos
 
         # Frames
         self.setup_ui()
 
-    def init_csv(self):
-        """Inicializa el archivo CSV y escribe los encabezados si está vacío."""
-        with open(self.csv_file, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([
-                "FilaCBA", "ColCBA", "FilaCNA", "ColCNA",
-                "Valor(FilaCNA-1,ColCNA+2)",
-                "Valor(FilaCNA-1,ColCNA-2)",
-                "Valor(FilaCNA+1,ColCNA+2)",
-                "Valor(FilaCNA+1,ColCNA-2)",
-                "Valor(FilaCNA-2,ColCNA+1)",
-                "Valor(FilaCNA-2,ColCNA-1)",
-                "Valor(FilaCNA+2,ColCNA+1)",
-                "Valor(FilaCNA+2,ColCNA-1)",
-                "FilaCNE", "ColCNE", "Valor(FilaCNE,ColCNE)",
-                "Puntaje Acumulado CN"
-            ])
-
+    
     def setup_ui(self):
         # Frame para selección de nivel
         level_frame = ttk.LabelFrame(self.root, text="Configuración del Juego")
@@ -72,7 +52,8 @@ class SmartHorsesGame:
                     text="", width=6, height=3,
                     state=tk.DISABLED,
                     relief=tk.RIDGE,
-                    command=lambda x=i, y=j: self.move_black_horse(x, y)
+                    command=self.create_move_command(i, j)
+
                 )
                 button.grid(row=i, column=j, padx=2, pady=2)
                 row.append(button)
@@ -89,6 +70,8 @@ class SmartHorsesGame:
         ttk.Label(self.info_frame, textvariable=self.black_points).grid(row=1, column=1, sticky="w", padx=5)
 
         ttk.Label(self.info_frame, textvariable=self.turn).grid(row=2, column=0, columnspan=2, pady=5)
+    def create_move_command(self, x, y):
+        return lambda: self.move_black_horse(x, y)
     def start_game(self):
         self.initialize_positions()
         self.update_board()
@@ -128,74 +111,28 @@ class SmartHorsesGame:
         self.board_buttons[wx][wy].config(text="♞", bg="white", state=tk.NORMAL)
 
         bx, by = divmod(self.black_horse, 8)
-        self.board_buttons[bx][by].config(text="♘", bg="black", fg="white", state=tk.NORMAL)
+        self.board_buttons[bx][by].config(text="♘", bg="black", fg="black", state=tk.NORMAL)
 
     def enable_board(self):
         """Habilitar las casillas para el movimiento del caballo negro."""
         for row in self.board_buttons:
             for button in row:
                 button.config(state=tk.NORMAL)
-    def move_black_horse(self, x, y):
-        """Mueve el caballo negro a la posición seleccionada."""
-        if self.turn.get() != "Turno: Caballo Negro":
-            return
-
-        pos = x * 8 + y
-        if self.is_valid_move(self.black_horse, pos):
-            self.collect_points(pos, "black")
-            self.black_horse = pos
-            self.turn.set("Turno: Caballo Blanco")
-            self.update_board()
-            self.check_game_end()
-            self.root.after(500, self.move_white_horse)
-    def move_white_horse(self):
-        """Mueve el caballo blanco usando Minimax."""
-        if self.turn.get() != "Turno: Caballo Blanco":
-            return
-
-        depth = {"Principiante": 2, "Amateur": 4, "Experto": 6}[self.selected_level.get()]
-        valid_moves = self.get_valid_moves(self.white_horse)
-        if not valid_moves:
-            self.turn.set("Turno: Caballo Negro")
-            return
-
-        best_move = None
-        best_score = float('-inf')
-        for move in valid_moves:
-            points = self.points_positions.get(move, 0)
-            multiplier = 2 if move in self.x2_positions else 1
-            move_score = self.minimax(move, depth - 1, False, float('-inf'), float('inf')) + points * multiplier
-            if move_score > best_score:
-                best_score = move_score
-                best_move = move
-
-        if best_move is not None:
-            self.collect_points(best_move, "white")
-            self.white_horse = best_move
-
-        self.turn.set("Turno: Caballo Negro")
-        self.update_board()
-        self.check_game_end()
-
-
+    
     def get_valid_moves(self, pos):
         """Devuelve una lista de movimientos válidos en 'L' para una posición."""
         x, y = divmod(pos, 8)
+        
         moves = [
             (x + 2, y + 1), (x + 2, y - 1), (x - 2, y + 1), (x - 2, y - 1),
             (x + 1, y + 2), (x + 1, y - 2), (x - 1, y + 2), (x - 1, y - 2)
         ]
-        moves = [
-            x * 8 + y
-            for dx, dy in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
-            if 0 <= (nx := x + dx) < 8 and 0 <= (ny := y + dy) < 8
-        ]
-        return moves
-       # return [nx * 8 + ny for nx, ny in moves if 0 <= nx < 8 and 0 <= ny < 8]
+        print(moves)
+        return [nx * 8 + ny for nx, ny in moves if 0 <= nx < 8 and 0 <= ny < 8]
 
     def is_valid_move(self, current_pos, new_pos):
         """Verifica si un movimiento es válido en 'L'."""
-        return new_pos in self.get_valid_moves(current_pos)        
+        return new_pos in self.get_valid_moves(current_pos)
     def collect_points(self, pos, player):
         """Recoge los puntos de una casilla para un jugador."""
         multiplier = 2 if (player == "white" and self.white_x2) or (player == "black" and self.black_x2) else 1
@@ -231,7 +168,7 @@ class SmartHorsesGame:
         if not (0 <= x < 8 and 0 <= y < 8):
             return -1
         pos = x * 8 + y
-        if pos == self.white_horse:
+        if pos == self.black_horse:
             return -1
         if pos in self.points_positions:
             return self.points_positions[pos]
@@ -239,27 +176,14 @@ class SmartHorsesGame:
             return 11
         return 0
 
-    def log_move(self, cba_x, cba_y, cna_x, cna_y, cne_x, cne_y, cne_value, score):
-        """Registra un movimiento en el archivo CSV."""
-        with open(self.csv_file, mode='a', newline='') as file:
-            writer = csv.writer(file)
-
-            # Obtener valores de las casillas posibles en forma de "L"
-            moves = [
-                (cna_x - 1, cna_y + 2), (cna_x - 1, cna_y - 2),
-                (cna_x + 1, cna_y + 2), (cna_x + 1, cna_y - 2),
-                (cna_x - 2, cna_y + 1), (cna_x - 2, cna_y - 1),
-                (cna_x + 2, cna_y + 1), (cna_x + 2, cna_y - 1)
-            ]
-            move_data = []
-            for x, y in moves:
-                move_data.extend([self.get_cell_value(x, y)])
-
-            writer.writerow([
-                cba_x, cba_y, cna_x, cna_y,
-                *move_data, cne_x, cne_y, cne_value, score
-            ])
-
+    def print_horses_positions(self):
+        """Imprime en la terminal las posiciones actuales de los caballos."""
+        white_x, white_y = divmod(self.white_horse, 8)
+        black_x, black_y = divmod(self.black_horse, 8)
+        print(f"Caballo Blanco: Fila {white_x + 1}, Columna {white_y + 1}")
+        print(f"Caballo Negro: Fila {black_x + 1}, Columna {black_y + 1}")
+        return white_x, white_y
+    
     def move_black_horse(self, x, y):
         """Mueve el caballo negro a la posición seleccionada."""
         if self.turn.get() != "Turno: Caballo Negro":
@@ -267,11 +191,6 @@ class SmartHorsesGame:
 
         pos = x * 8 + y
         if self.is_valid_move(self.black_horse, pos):
-            # Registrar el movimiento
-            cba_x, cba_y = divmod(self.white_horse, 8)
-            cna_x, cna_y = divmod(self.black_horse, 8)
-            cne_value = self.get_cell_value(x, y)
-            self.log_move(cba_x, cba_y, cna_x, cna_y, x, y, cne_value, self.black_points.get())
 
             self.collect_points(pos, "black")
             self.black_horse = pos
@@ -279,63 +198,129 @@ class SmartHorsesGame:
             self.update_board()
             self.check_game_end()
             self.root.after(500, self.move_white_horse)
+    def move_white_horse(self):
+        """Mueve el caballo blanco usando Minimax."""
+        if self.turn.get() != "Turno: Caballo Blanco":
+            return
+
+        depth = {"Principiante": 2, "Amateur": 4, "Experto": 6}[self.selected_level.get()]
+        valid_moves = self.get_valid_moves(self.white_horse)
+        if not valid_moves:
+            self.turn.set("Turno: Caballo Negro")
+            return
+
+        best_move = None
+        best_score = float('-inf')
+
+        for move in valid_moves:
+            self.move_history.add(move)  # Añadir a historial para evitar ciclos
+            points = self.points_positions.get(move, 0)
+            multiplier = 2 if move in self.x2_positions else 1
+            move_score = self.minimax(move, depth - 1, False, float('-inf'), float('inf')) + points * multiplier
+            self.move_history.remove(move)  # Limpiar historial
+
+            if move_score > best_score:
+                best_score = move_score
+                best_move = move
+
+        if best_move is not None:
+            self.collect_points(best_move, "white")
+            self.white_horse = best_move
+
+        self.turn.set("Turno: Caballo Negro")
+        self.update_board()
+        self.check_game_end()
+        self.print_horses_positions()
+
+    
     def minimax(self, pos, depth, maximizing_player, alpha, beta):
-        """Implementa el algoritmo Minimax con poda alfa-beta."""
-        if depth == 0 or not self.points_positions:  # Condición de finalización
+        if depth == 0 or not self.points_positions:
             return self.evaluate_board(pos, maximizing_player)
 
-        valid_moves = self.get_valid_moves(pos)  # Obtiene movimientos válidos
+        valid_moves = self.get_valid_moves(pos)
+        valid_moves = [m for m in valid_moves if m not in self.move_history]  # Evitar ciclos
+
         if maximizing_player:
             max_eval = float('-inf')
             for move in valid_moves:
-            # Copiar el estado actual del tablero para esta rama
-                temp_positions = self.points_positions.copy()
-                temp_x2 = self.x2_positions.copy()
-
-            # Evaluar puntos
-                points = temp_positions.pop(move, 0)
-                multiplier = 2 if move in temp_x2 else 1
-                eval_score = points * multiplier
-
-            # Recursión en Minimax
-                eval = self.minimax(move, depth - 1, False, alpha, beta) + eval_score
+                self.move_history.add(move)
+                eval = self.minimax(move, depth - 1, False, alpha, beta)
                 max_eval = max(max_eval, eval)
                 alpha = max(alpha, max_eval)
-
-                if beta <= alpha:  # Poda alfa-beta
+                self.move_history.remove(move)
+                if beta <= alpha:
                     break
-
             return max_eval
         else:
             min_eval = float('inf')
             for move in valid_moves:
-            # Copiar el estado actual del tablero para esta rama
-                temp_positions = self.points_positions.copy()
-                temp_x2 = self.x2_positions.copy()
-
-            # Evaluar puntos
-                points = temp_positions.pop(move, 0)
-                multiplier = 2 if move in temp_x2 else 1
-                eval_score = points * multiplier
-
-            # Recursión en Minimax
-                eval = self.minimax(move, depth - 1, True, alpha, beta) - eval_score
+                self.move_history.add(move)
+                eval = self.minimax(move, depth - 1, True, alpha, beta)
                 min_eval = min(min_eval, eval)
                 beta = min(beta, min_eval)
-
-                if beta <= alpha:  # Poda alfa-beta
+                self.move_history.remove(move)
+                if beta <= alpha:
                     break
-
             return min_eval
+    
+       #HEURISTICA 1: IA1
+
 
     def evaluate_board(self, pos, maximizing_player):
-        """Evalúa el estado del tablero."""
+        
+        #Evalúa el estado del tablero para un jugador.
+        #Prioriza puntos altos, multiplicadores y movilidad futura.
+        
+        # Puntos actuales
+        points = self.points_positions.get(pos, 0)
+    
+        # Multiplicador x2
+        multiplier = 2 if pos in self.x2_positions else 1
+    
+        # Movimientos futuros válidos
+        future_moves = len(self.get_valid_moves(pos))
+    
+    # Ponderación para el caballo opuesto (control del oponente)
+        opponent_horse = self.black_horse if maximizing_player else self.white_horse
+        opponent_control = sum(
+            1 for move in self.get_valid_moves(opponent_horse) if move == pos
+        )
+    
+    # Fórmula heurística
+        score = (
+            points * multiplier  # Prioriza puntos altos con multiplicadores
+            + future_moves * 0.5  # Da prioridad a movimientos futuros
+            - opponent_control * 1  # Penaliza estar en control del oponente
+        )
+    
+        return score
+    """
+    #HEURISTICA 2: IA2
+    def evaluate_board(self, pos, maximizing_player):
+        
+    # Puntaje inmediato: puntos en la casilla actual
         points = self.points_positions.get(pos, 0)
         multiplier = 2 if pos in self.x2_positions else 1
-        future_moves = len(self.get_valid_moves(pos))
+        current_score = points * multiplier
+    # Priorizamos casillas x2 de manera explícita
+        x2_priority = 50 if pos in self.x2_positions else 0
 
-    # Heurística: Prioriza puntos altos y movimientos futuros
-        return points * multiplier + future_moves * 0.5
+    # Potencial de movimientos futuros
+        future_moves = self.get_valid_moves(pos)
+        reach_score = len(future_moves)  # Cantidad de movimientos posibles
+
+    # Priorizamos el puntaje inmediato, las casillas x2 y los movimientos futuros
+        immediate_weight = 1.0
+        x2_weight = 0.2  # Alta prioridad para casillas x2
+        reach_weight = 4
+        return (current_score * immediate_weight +
+                x2_priority * x2_weight +
+                reach_score * reach_weight)
+
+    """
+
+
+
 
 
 
